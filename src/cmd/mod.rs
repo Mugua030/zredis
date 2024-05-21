@@ -28,12 +28,15 @@ pub trait CommandExecutor {
 }
 
 #[enum_dispatch(CommandExecutor)]
+#[derive(Debug)]
 pub enum Command {
     Get(Get),
     Set(Set),
     HGet(HGet),
     HSet(HSet),
     HGetAll(HGetAll),
+
+    Unrecognized(Unrecognized),
 }
 
 #[derive(Debug)]
@@ -65,6 +68,26 @@ pub struct HGetAll {
     key: String,
 }
 
+#[derive(Debug)]
+pub struct Unrecognized;
+impl CommandExecutor for Unrecognized {
+    fn execute(self, _backend: &Backend) -> RespFrame {
+        RESP_OK.clone()
+    }
+}
+
+impl TryFrom<RespFrame> for Command {
+    type Error = CommandError;
+    fn try_from(value: RespFrame) -> Result<Self, Self::Error> {
+        match value {
+            RespFrame::Array(array) => array.try_into(),
+            _ => Err(CommandError::InvalidCommand(
+                "Command must be an Array".to_string(),
+            )),
+        }
+    }
+}
+
 impl TryFrom<RespArray> for Command {
     type Error = CommandError;
     fn try_from(v: RespArray) -> Result<Self, Self::Error> {
@@ -75,10 +98,7 @@ impl TryFrom<RespArray> for Command {
                 b"hget" => Ok(HGet::try_from(v)?.into()),
                 b"hset" => Ok(HSet::try_from(v)?.into()),
                 b"hgetall" => Ok(HGetAll::try_from(v)?.into()),
-                _ => Err(CommandError::InvalidCommand(format!(
-                    "Invalid command: {}",
-                    String::from_utf8_lossy(cmd.as_ref())
-                ))),
+                _ => Ok(Unrecognized.into()),
             },
             _ => Err(CommandError::InvalidCommand(
                 "Command must have a BulkString as the first argument".to_string(),
@@ -129,17 +149,20 @@ fn extract_args(value: RespArray, start: usize) -> Result<Vec<RespFrame>, Comman
 mod tests {
     use super::*;
     use crate::{RespDecode, RespNull};
-    use anyhow::Result;
+    use anyhow::{Context, Result};
     use bytes::BytesMut;
 
     #[test]
     fn test_command() -> Result<()> {
         let mut buf = BytesMut::new();
         buf.extend_from_slice(b"*2\r\n$3\r\nget\r\n$5\r\nhello\r\n");
-        let frame = RespArray::decode(&mut buf)?;
+
+        let frame =
+            RespArray::decode(&mut buf).with_context(|| "respArray decode fail".to_string())?;
         let cmd: Command = frame.try_into()?;
         let backend = Backend::new();
         let ret = cmd.execute(&backend);
+
         assert_eq!(ret, RespFrame::Null(RespNull));
 
         Ok(())

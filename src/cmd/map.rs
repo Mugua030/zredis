@@ -23,16 +23,14 @@ impl CommandExecutor for Set {
 impl TryFrom<RespArray> for Get {
     type Error = CommandError;
     fn try_from(value: RespArray) -> Result<Self, Self::Error> {
-        validate_command(&value, &["set"], 2)?;
+        validate_command(&value, &["get"], 1)?;
+        //validate_command(&value, &["set"], 2)?;
         let mut args = extract_args(value, 1)?.into_iter();
         match args.next() {
             Some(RespFrame::BulkString(key)) => Ok(Get {
                 key: String::from_utf8(key.0)?,
-                value,
             }),
-            _ => Err(CommandError::InvalidArgument(
-                "Invalid key".to_string(),
-            )),
+            _ => Err(CommandError::InvalidArgument("Invalid key".to_string())),
         }
     }
 }
@@ -56,13 +54,18 @@ impl TryFrom<RespArray> for Set {
 
 #[cfg(test)]
 mod tests {
+    use super::*;
+    use crate::RespDecode;
+    use anyhow::Result;
+    use bytes::BytesMut;
+
     #[test]
     fn test_get_from_resp_array() -> Result<()> {
         let mut buf = BytesMut::new();
         buf.extend_from_slice(b"*2\r\n$3\r\nget\r\n$5\r\nhello\r\n");
         let frame = RespArray::decode(&mut buf)?;
         let result: Get = frame.try_into()?;
-        asset_eq!(result.key, "hello");
+        assert_eq!(result.key, "hello");
 
         Ok(())
     }

@@ -8,8 +8,8 @@ pub struct Backend(Arc<BackendInner>);
 
 #[derive(Debug)]
 pub struct BackendInner {
-    pub map: DashMap<String, RespFrame>,
-    pub hmap: DashMap<String, DashMap<String, RespFrame>>,
+    pub(crate) map: DashMap<String, RespFrame>,
+    pub(crate) hmap: DashMap<String, DashMap<String, RespFrame>>,
 }
 
 impl Deref for Backend {
@@ -40,6 +40,7 @@ impl Backend {
     }
 
     pub fn get(&self, key: &str) -> Option<RespFrame> {
+        //self.map.get(key).map(|v| v.value().clone())
         self.map.get(key).map(|v| v.value().clone())
     }
 

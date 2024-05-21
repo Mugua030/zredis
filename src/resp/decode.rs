@@ -24,6 +24,17 @@ impl RespDecode for RespFrame {
                 let frame = i64::decode(buf)?;
                 Ok(frame.into())
             }
+            Some(b'$') => {
+                // will throw error when run test if redis proto "$3\r\n..."
+                match RespNullBulkString::decode(buf) {
+                    Ok(frame) => Ok(frame.into()),
+                    Err(RespError::NotComplete) => Err(RespError::NotComplete),
+                    Err(_) => {
+                        let frame = BulkString::decode(buf)?;
+                        Ok(frame.into())
+                    }
+                }
+            }
             Some(b'*') => match RespNullArray::decode(buf) {
                 Ok(frame) => Ok(frame.into()),
                 Err(RespError::NotComplete) => Err(RespError::NotComplete),
@@ -52,8 +63,9 @@ impl RespDecode for RespFrame {
                 let frame = RespSet::decode(buf)?;
                 Ok(frame.into())
             }
+            None => Err(RespError::NotComplete),
             _ => Err(RespError::InvalidFrameType(format!(
-                "expect length: unknown frame type: {:?}",
+                "[decode.rs] expect length: unknown frame type: {:?}",
                 buf
             ))),
         }
@@ -362,5 +374,31 @@ fn calc_total_length(buf: &[u8], end: usize, len: usize, prefix: &str) -> Result
             Ok(total)
         }
         _ => Ok(len + CRLF_LEN),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use anyhow::Result;
+    use bytes::BufMut;
+
+    #[test]
+    fn test_simple_string_decode() -> Result<()> {
+        let mut buf = BytesMut::new();
+        buf.extend_from_slice(b"+OK\r\n");
+
+        let frame = SimpleString::decode(&mut buf)?;
+        assert_eq!(frame, SimpleString::new("OK".to_string()));
+        // section 2
+        buf.extend_from_slice(b"+hello\r");
+        let ret = SimpleString::decode(&mut buf);
+        assert_eq!(ret.unwrap_err(), RespError::NotComplete);
+        // section 3
+        buf.put_u8(b'\n');
+        let frame = SimpleString::decode(&mut buf)?;
+        assert_eq!(frame, SimpleString::new("hello".to_string()));
+
+        Ok(())
     }
 }
