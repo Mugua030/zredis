@@ -1,4 +1,4 @@
-use crate::RespFrame;
+use crate::{RespFrame, SimpleString};
 use dashmap::DashMap;
 use std::ops::Deref;
 use std::sync::Arc;
@@ -61,5 +61,9 @@ impl Backend {
 
     pub fn hgetall(&self, key: &str) -> Option<DashMap<String, RespFrame>> {
         self.hmap.get(key).map(|v| v.clone())
+    }
+
+    pub fn echo(&self, key: &str) -> Option<RespFrame> {
+        Some(RespFrame::SimpleString(SimpleString::new(key.to_string())))
     }
 }

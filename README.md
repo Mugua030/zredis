@@ -1,1 +1,3 @@
-### geek eduxx mini redis
+### About
+---
+A simple redis

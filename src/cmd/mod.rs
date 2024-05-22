@@ -1,7 +1,7 @@
 mod hmap;
 mod map;
 
-use crate::{Backend, RespArray, RespError, RespFrame, SimpleString};
+use crate::{Backend, RespArray, RespError, RespFrame, RespNull, SimpleString};
 use enum_dispatch::enum_dispatch;
 use lazy_static::lazy_static;
 use thiserror::Error;
@@ -35,6 +35,7 @@ pub enum Command {
     HGet(HGet),
     HSet(HSet),
     HGetAll(HGetAll),
+    Echo(Echo),
 
     Unrecognized(Unrecognized),
 }
@@ -69,10 +70,42 @@ pub struct HGetAll {
 }
 
 #[derive(Debug)]
+pub struct Echo {
+    key: String,
+}
+
+#[derive(Debug)]
 pub struct Unrecognized;
 impl CommandExecutor for Unrecognized {
     fn execute(self, _backend: &Backend) -> RespFrame {
         RESP_OK.clone()
+    }
+}
+
+// for echo command
+impl TryFrom<RespArray> for Echo {
+    type Error = CommandError;
+    fn try_from(value: RespArray) -> Result<Self, Self::Error> {
+        validate_command(&value, &["echo"], 1)?;
+        //m how
+        let mut args = extract_args(value, 1)?.into_iter();
+        match args.next() {
+            Some(RespFrame::BulkString(key)) => Ok(Echo {
+                key: String::from_utf8(key.0)?,
+            }),
+            _ => Err(CommandError::InvalidArgument(
+                "Invalid argument".to_string(),
+            )),
+        }
+    }
+}
+
+impl CommandExecutor for Echo {
+    fn execute(self, backend: &Backend) -> RespFrame {
+        match backend.echo(self.key.as_str()) {
+            Some(value) => value,
+            None => RespFrame::Null(RespNull),
+        }
     }
 }
 
@@ -98,6 +131,7 @@ impl TryFrom<RespArray> for Command {
                 b"hget" => Ok(HGet::try_from(v)?.into()),
                 b"hset" => Ok(HSet::try_from(v)?.into()),
                 b"hgetall" => Ok(HGetAll::try_from(v)?.into()),
+                b"echo" => Ok(Echo::try_from(v)?.into()),
                 _ => Ok(Unrecognized.into()),
             },
             _ => Err(CommandError::InvalidCommand(
@@ -148,7 +182,7 @@ fn extract_args(value: RespArray, start: usize) -> Result<Vec<RespFrame>, Comman
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{RespDecode, RespNull};
+    use crate::{RespDecode, RespEncode, RespNull};
     use anyhow::{Context, Result};
     use bytes::BytesMut;
 
@@ -164,6 +198,22 @@ mod tests {
         let ret = cmd.execute(&backend);
 
         assert_eq!(ret, RespFrame::Null(RespNull));
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_echo() -> Result<()> {
+        let mut buf = BytesMut::new();
+        buf.extend_from_slice(b"*2\r\n$4\r\necho\r\n$5\r\nmecho\r\n");
+
+        let frame = RespArray::decode(&mut buf)
+            .with_context(|| "[test_echo] respArray decode fail".to_string())?;
+        let cmd: Command = frame.try_into()?;
+        let backend = Backend::new();
+        let ret = cmd.execute(&backend);
+
+        println!("ret: {:?}", String::from_utf8(ret.encode()));
 
         Ok(())
     }
