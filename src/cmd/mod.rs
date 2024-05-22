@@ -35,6 +35,8 @@ pub enum Command {
     HGet(HGet),
     HSet(HSet),
     HGetAll(HGetAll),
+    HMGet(HMGet),
+
     Echo(Echo),
 
     Unrecognized(Unrecognized),
@@ -67,6 +69,12 @@ pub struct HSet {
 #[derive(Debug)]
 pub struct HGetAll {
     key: String,
+}
+
+#[derive(Debug)]
+pub struct HMGet {
+    key: String,
+    fields: Vec<String>,
 }
 
 #[derive(Debug)]
@@ -131,6 +139,7 @@ impl TryFrom<RespArray> for Command {
                 b"hget" => Ok(HGet::try_from(v)?.into()),
                 b"hset" => Ok(HSet::try_from(v)?.into()),
                 b"hgetall" => Ok(HGetAll::try_from(v)?.into()),
+                b"hmget" => Ok(HMGet::try_from(v)?.into()),
                 b"echo" => Ok(Echo::try_from(v)?.into()),
                 _ => Ok(Unrecognized.into()),
             },
@@ -182,7 +191,7 @@ fn extract_args(value: RespArray, start: usize) -> Result<Vec<RespFrame>, Comman
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{RespDecode, RespEncode, RespNull};
+    use crate::{BulkString, RespDecode, RespEncode, RespNull, RespNullBulkString};
     use anyhow::{Context, Result};
     use bytes::BytesMut;
 
@@ -214,6 +223,45 @@ mod tests {
         let ret = cmd.execute(&backend);
 
         println!("ret: {:?}", String::from_utf8(ret.encode()));
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_hmget() -> Result<()> {
+        //Set the values
+        let mut bf = BytesMut::new();
+        bf.extend_from_slice(
+            b"*4\r\n$4\r\nhset\r\n$9\r\nhmgetkey1\r\n$6\r\nfield1\r\n$6\r\nvalue1\r\n",
+        );
+        let fm = RespArray::decode(&mut bf)
+            .with_context(|| "[test_hmget] hset value decode fail".to_string())?;
+        let cmd0: Command = fm.try_into()?;
+        let bkend = Backend::new();
+        let ret_v = cmd0.execute(&bkend);
+        println!("ret_v: {:?}", String::from_utf8(ret_v.encode()));
+
+        //HMGet values
+        let mut buf = BytesMut::new();
+        buf.extend_from_slice(
+            b"*4\r\n$5\r\nhmget\r\n$9\r\nhmgetkey1\r\n$6\r\nfield1\r\n$6\r\nfield2\r\n",
+        );
+        //buf.extend_from_slice(b"*4\r\n$5\r\nhmget\r\n$9\r\nhmgetkey1\r\n$6\r\nfield1\r\n");
+
+        let frame = RespArray::decode(&mut buf)
+            .with_context(|| "[test_hmget] RespArray decode fail".to_string())?;
+        let cmd: Command = frame.try_into()?;
+        //let backend = Backend::new();
+        let ret = cmd.execute(&bkend);
+
+        //println!("ret: {:?}", String::from_utf8(ret.encode()));
+
+        let expected = RespFrame::Array(RespArray::new(vec![
+            RespFrame::BulkString(BulkString::new("value1")),
+            RespFrame::NullBulkString(RespNullBulkString),
+        ]));
+
+        assert_ne!(ret, expected);
 
         Ok(())
     }

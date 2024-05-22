@@ -63,6 +63,16 @@ impl Backend {
         self.hmap.get(key).map(|v| v.clone())
     }
 
+    pub fn hmget(&self, key: &str, fields: Vec<String>) -> Option<Vec<RespFrame>> {
+        //self.hmap.get(key).filter(|x| fields.contains(x));
+        self.hmap.get(key).map(|smap| {
+            fields
+                .iter()
+                .filter_map(|field| smap.get(field).map(|v| v.value().clone()))
+                .collect()
+        })
+    }
+
     pub fn echo(&self, key: &str) -> Option<RespFrame> {
         Some(RespFrame::SimpleString(SimpleString::new(key.to_string())))
     }
