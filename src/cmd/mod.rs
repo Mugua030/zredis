@@ -38,6 +38,8 @@ pub enum Command {
     HMGet(HMGet),
 
     Echo(Echo),
+    Sadd(Sadd),
+    Sismember(Sismember),
 
     Unrecognized(Unrecognized),
 }
@@ -80,6 +82,18 @@ pub struct HMGet {
 #[derive(Debug)]
 pub struct Echo {
     key: String,
+}
+
+#[derive(Debug)]
+pub struct Sadd {
+    key: String,
+    item: RespFrame,
+}
+
+#[derive(Debug)]
+pub struct Sismember {
+    key: String,
+    item: RespFrame,
 }
 
 #[derive(Debug)]
@@ -141,6 +155,8 @@ impl TryFrom<RespArray> for Command {
                 b"hgetall" => Ok(HGetAll::try_from(v)?.into()),
                 b"hmget" => Ok(HMGet::try_from(v)?.into()),
                 b"echo" => Ok(Echo::try_from(v)?.into()),
+                b"sadd" => Ok(Sadd::try_from(v)?.into()),
+                b"sismember" => Ok(Sismember::try_from(v)?.into()),
                 _ => Ok(Unrecognized.into()),
             },
             _ => Err(CommandError::InvalidCommand(
@@ -192,8 +208,60 @@ fn extract_args(value: RespArray, start: usize) -> Result<Vec<RespFrame>, Comman
 mod tests {
     use super::*;
     use crate::{BulkString, RespDecode, RespEncode, RespNull, RespNullBulkString};
-    use anyhow::{Context, Result};
+    use anyhow::{Context, Ok, Result};
     use bytes::BytesMut;
+
+    #[test]
+    fn test_sadd() -> Result<()> {
+        let mut buf = BytesMut::new();
+        //buf.extend_from_slice(b"*3\r\n$4\r\nsadd\r\n$4\r\nskey\r\n$7\r\nsvalue1\r\n");
+        buf.extend_from_slice(b"*3\r\n$4\r\nsadd\r\n$4\r\nskey\r\n$2\r\n12\r\n");
+
+        let frame =
+            RespArray::decode(&mut buf).with_context(|| "[sadd] decode fail".to_string())?;
+        let cmd: Command = frame.try_into()?;
+        println!("cmd: {:?}", &cmd);
+
+        let bkend = Backend::new();
+        let ret = cmd.execute(&bkend);
+
+        assert_eq!(ret, RespFrame::Integer(1));
+        Ok(())
+    }
+
+    fn exec_sadd_cmd(bkend: &Backend) -> Result<RespFrame> {
+        let mut buf = BytesMut::new();
+        buf.extend_from_slice(b"*3\r\n$4\r\nsadd\r\n$4\r\nskey\r\n$7\r\nsvalue1\r\n");
+        //buf.extend_from_slice(b"*3\r\n$4\r\nsadd\r\n$4\r\nskey\r\n$2\r\n12\r\n");
+
+        let frame =
+            RespArray::decode(&mut buf).with_context(|| "[sadd] decode fail".to_string())?;
+        let cmd: Command = frame.try_into()?;
+        println!("cmd: {:?}", &cmd);
+
+        //let bkend = Backend::new();
+        let ret = cmd.execute(bkend);
+
+        Ok(ret)
+    }
+
+    #[test]
+    fn test_sismember() -> Result<()> {
+        let bkend = Backend::new();
+
+        let r = exec_sadd_cmd(&bkend)?;
+        println!("[exec-sadd-cmd] r: {:?}", r);
+
+        let mut buf = BytesMut::new();
+        buf.extend_from_slice(b"*3\r\n$9\r\nsismember\r\n$4\r\nskey\r\n$7\r\nsvalue1\r\n");
+        let frame = RespArray::decode(&mut buf).with_context(|| "[sismember] decode fail")?;
+        let cmd: Command = frame.try_into()?;
+        let ret = cmd.execute(&bkend);
+
+        assert_eq!(ret, RespFrame::Integer(1));
+
+        Ok(())
+    }
 
     #[test]
     fn test_command() -> Result<()> {

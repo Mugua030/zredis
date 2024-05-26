@@ -1,6 +1,6 @@
 use crate::{
-    BulkString, RespArray, RespDecode, RespError, RespFrame, RespMap, RespNull, RespNullArray,
-    RespNullBulkString, RespSet, SimpleError, SimpleString,
+    BulkString, Nf64, RespArray, RespDecode, RespError, RespFrame, RespMap, RespNull,
+    RespNullArray, RespNullBulkString, RespSet, SimpleError, SimpleString,
 };
 use bytes::{Buf, BytesMut};
 
@@ -52,7 +52,8 @@ impl RespDecode for RespFrame {
                 Ok(frame.into())
             }
             Some(b',') => {
-                let frame = f64::decode(buf)?;
+                //let frame = f64::decode(buf)?;
+                let frame = Nf64::decode(buf)?;
                 Ok(frame.into())
             }
             Some(b'%') => {
@@ -83,6 +84,7 @@ impl RespDecode for RespFrame {
             Some(b'-') => SimpleError::expect_length(buf),
             Some(b'#') => bool::expect_length(buf),
             Some(b',') => f64::expect_length(buf),
+            //Some(b',') => Nf64::expect_length(buf),
             Some(b'_') => RespNull::expect_length(buf),
             _ => Err(RespError::NotComplete),
         }
@@ -237,6 +239,21 @@ impl RespDecode for f64 {
         let data = buf.split_to(end + CRLF_LEN);
         let s = String::from_utf8_lossy(&data[Self::PREFIX.len()..end]);
         Ok(s.parse()?)
+    }
+    fn expect_length(buf: &[u8]) -> Result<usize, RespError> {
+        let end = extract_simple_frame_data(buf, Self::PREFIX)?;
+        Ok(end + CRLF_LEN)
+    }
+}
+
+impl RespDecode for Nf64 {
+    const PREFIX: &'static str = ",";
+    fn decode(buf: &mut BytesMut) -> Result<Self, RespError> {
+        let end = extract_simple_frame_data(buf, Self::PREFIX)?;
+        let data = buf.split_to(end + CRLF_LEN);
+        let s = String::from_utf8_lossy(&data[Self::PREFIX.len()..end]);
+        let value: f64 = s.parse()?;
+        Ok(Nf64::new(value))
     }
     fn expect_length(buf: &[u8]) -> Result<usize, RespError> {
         let end = extract_simple_frame_data(buf, Self::PREFIX)?;

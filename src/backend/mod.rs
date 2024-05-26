@@ -1,5 +1,6 @@
 use crate::{RespFrame, SimpleString};
 use dashmap::DashMap;
+use dashmap::DashSet;
 use std::ops::Deref;
 use std::sync::Arc;
 
@@ -10,6 +11,7 @@ pub struct Backend(Arc<BackendInner>);
 pub struct BackendInner {
     pub(crate) map: DashMap<String, RespFrame>,
     pub(crate) hmap: DashMap<String, DashMap<String, RespFrame>>,
+    pub(crate) dset: DashMap<String, DashSet<RespFrame>>,
 }
 
 impl Deref for Backend {
@@ -30,6 +32,7 @@ impl Default for BackendInner {
         Self {
             map: DashMap::new(),
             hmap: DashMap::new(),
+            dset: DashMap::new(),
         }
     }
 }
@@ -75,5 +78,29 @@ impl Backend {
 
     pub fn echo(&self, key: &str) -> Option<RespFrame> {
         Some(RespFrame::SimpleString(SimpleString::new(key.to_string())))
+    }
+
+    pub fn sadd(&self, key: String, memb: RespFrame) -> Option<u8> {
+        //self.dset.get(key).and(optb)
+        let set: DashSet<RespFrame> = DashSet::new();
+        set.insert(memb);
+        if self.dset.insert(key, set).is_some() {
+            Some(1)
+        } else {
+            Some(0)
+        }
+    }
+
+    pub fn sismember(&self, key: String, item: RespFrame) -> Option<u8> {
+        match self.dset.get(&key) {
+            Some(vset) => {
+                if vset.contains(&item) {
+                    Some(1)
+                } else {
+                    None
+                }
+            }
+            None => None,
+        }
     }
 }

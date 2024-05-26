@@ -1,4 +1,7 @@
-use super::{extract_args, validate_command, CommandExecutor, HGet, HGetAll, HMGet, HSet, RESP_OK};
+use super::{
+    extract_args, validate_command, CommandExecutor, HGet, HGetAll, HMGet, HSet, Sadd, Sismember,
+    RESP_OK,
+};
 use crate::{cmd::CommandError, RespArray, RespFrame, RespMap};
 
 impl CommandExecutor for HGet {
@@ -40,6 +43,27 @@ impl CommandExecutor for HMGet {
         match mret {
             Some(values) => RespArray::new(values).into(),
             None => RespArray::new([]).into(),
+        }
+    }
+}
+
+impl CommandExecutor for Sadd {
+    fn execute(self, backend: &crate::Backend) -> RespFrame {
+        let ret = backend.sadd(self.key, self.item);
+        match ret {
+            Some(_) => RespFrame::Integer(1),
+            None => RespFrame::Integer(0),
+        }
+    }
+}
+impl CommandExecutor for Sismember {
+    fn execute(self, backend: &crate::Backend) -> RespFrame {
+        match backend.sismember(self.key, self.item) {
+            Some(v) => {
+                println!("[sismember.execute] v: {:?}", v);
+                RespFrame::Integer(1)
+            }
+            None => RespFrame::Integer(0),
         }
     }
 }
@@ -122,6 +146,38 @@ impl TryFrom<RespArray> for HMGet {
                 })
             }
             _ => Err(CommandError::InvalidArgument("Invalid key".to_string())),
+        }
+    }
+}
+
+// sadd and sismember
+impl TryFrom<RespArray> for Sadd {
+    type Error = CommandError;
+    fn try_from(value: RespArray) -> Result<Self, Self::Error> {
+        validate_command(&value, &["sadd"], 2)?;
+        let mut args = extract_args(value, 1)?.into_iter();
+        match (args.next(), args.next()) {
+            (Some(RespFrame::BulkString(key)), Some(value)) => Ok(Sadd {
+                key: String::from_utf8(key.0)?,
+                item: value,
+            }),
+            _ => Err(CommandError::InvalidArgument("Invalid field".to_string())),
+        }
+    }
+}
+
+impl TryFrom<RespArray> for Sismember {
+    type Error = CommandError;
+    fn try_from(value: RespArray) -> Result<Self, Self::Error> {
+        let num = 2; //value.len();
+        validate_command(&value, &["sismember"], num)?;
+        let mut args = extract_args(value, 1)?.into_iter();
+        match (args.next(), args.next()) {
+            (Some(RespFrame::BulkString(key)), Some(value)) => Ok(Sismember {
+                key: String::from_utf8(key.0)?,
+                item: value,
+            }),
+            _ => Err(CommandError::InvalidArgument("Invalid field".to_string())),
         }
     }
 }

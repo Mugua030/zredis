@@ -19,7 +19,7 @@
 */
 
 use crate::{
-    BulkString, RespArray, RespEncode, RespMap, RespNull, RespNullArray, RespNullBulkString,
+    BulkString, Nf64, RespArray, RespEncode, RespMap, RespNull, RespNullArray, RespNullBulkString,
     RespSet, SimpleError, SimpleString,
 };
 
@@ -97,6 +97,21 @@ impl RespEncode for f64 {
         } else {
             let sign = if self < 0.0 { "" } else { "+" };
             format!(",{}{}\r\n", sign, self)
+        };
+
+        buf.extend_from_slice(&ret.into_bytes());
+        buf
+    }
+}
+
+impl RespEncode for Nf64 {
+    fn encode(self) -> Vec<u8> {
+        let mut buf = Vec::with_capacity(32);
+        let ret = if self.0.abs() > 1e+8 || self.0.abs() < 1e-8 {
+            format!(",{:+e}", self.0)
+        } else {
+            let sign = if self.0 < 0.0 { "" } else { "+" };
+            format!(",{}{}\r\n", sign, self.0)
         };
 
         buf.extend_from_slice(&ret.into_bytes());
