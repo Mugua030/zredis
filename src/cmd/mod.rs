@@ -207,7 +207,7 @@ fn extract_args(value: RespArray, start: usize) -> Result<Vec<RespFrame>, Comman
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{BulkString, RespDecode, RespEncode, RespNull, RespNullBulkString};
+    use crate::{BulkString, RespDecode, RespEncode, RespNull};
     use anyhow::{Context, Ok, Result};
     use bytes::BytesMut;
 
@@ -326,7 +326,7 @@ mod tests {
 
         let expected = RespFrame::Array(RespArray::new(vec![
             RespFrame::BulkString(BulkString::new("value1")),
-            RespFrame::NullBulkString(RespNullBulkString),
+            RespFrame::Null(RespNull),
         ]));
 
         assert_ne!(ret, expected);

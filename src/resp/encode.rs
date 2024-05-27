@@ -19,8 +19,7 @@
 */
 
 use crate::{
-    BulkString, Nf64, RespArray, RespEncode, RespMap, RespNull, RespNullArray, RespNullBulkString,
-    RespSet, SimpleError, SimpleString,
+    BulkString, Nf64, RespArray, RespEncode, RespMap, RespNull, RespSet, SimpleError, SimpleString,
 };
 
 const BUF_CAP: usize = 4096;
@@ -54,12 +53,6 @@ impl RespEncode for BulkString {
     }
 }
 
-impl RespEncode for RespNullBulkString {
-    fn encode(self) -> Vec<u8> {
-        b"$-1\r\n".to_vec()
-    }
-}
-
 impl RespEncode for RespArray {
     fn encode(self) -> Vec<u8> {
         let mut buf = Vec::with_capacity(BUF_CAP);
@@ -68,12 +61,6 @@ impl RespEncode for RespArray {
             buf.extend_from_slice(&frame.encode());
         }
         buf
-    }
-}
-
-impl RespEncode for RespNullArray {
-    fn encode(self) -> Vec<u8> {
-        b"*-1\r\n".to_vec()
     }
 }
 
