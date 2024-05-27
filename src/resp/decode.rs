@@ -1,6 +1,6 @@
 use crate::{
-    BulkString, Nf64, RespArray, RespDecode, RespError, RespFrame, RespMap, RespNull,
-    RespNullArray, RespNullBulkString, RespSet, SimpleError, SimpleString,
+    BulkString, Nf64, RespArray, RespDecode, RespError, RespFrame, RespMap, RespNull, RespSet,
+    SimpleError, SimpleString,
 };
 use bytes::{Buf, BytesMut};
 
@@ -24,24 +24,13 @@ impl RespDecode for RespFrame {
                 let frame = i64::decode(buf)?;
                 Ok(frame.into())
             }
-            Some(b'$') => {
-                // will throw error when run test if redis proto "$3\r\n..."
-                match RespNullBulkString::decode(buf) {
-                    Ok(frame) => Ok(frame.into()),
-                    Err(RespError::NotComplete) => Err(RespError::NotComplete),
-                    Err(_) => {
-                        let frame = BulkString::decode(buf)?;
-                        Ok(frame.into())
-                    }
-                }
-            }
-            Some(b'*') => match RespNullArray::decode(buf) {
+            Some(b'$') => match BulkString::decode(buf) {
                 Ok(frame) => Ok(frame.into()),
-                Err(RespError::NotComplete) => Err(RespError::NotComplete),
-                Err(_) => {
-                    let frame = RespArray::decode(buf)?;
-                    Ok(frame.into())
-                }
+                Err(_) => Err(RespError::NotComplete),
+            },
+            Some(b'*') => match RespArray::decode(buf) {
+                Ok(frame) => Ok(frame.into()),
+                Err(_) => Err(RespError::NotComplete),
             },
             Some(b'_') => {
                 let frame = RespNull::decode(buf)?;
@@ -133,6 +122,7 @@ impl RespDecode for RespNull {
     }
 }
 
+/*
 impl RespDecode for RespNullArray {
     const PREFIX: &'static str = "*";
     fn decode(buf: &mut BytesMut) -> Result<Self, RespError> {
@@ -155,6 +145,7 @@ impl RespDecode for RespNullBulkString {
         Ok(5)
     }
 }
+*/
 
 impl RespDecode for i64 {
     const PREFIX: &'static str = ":";
